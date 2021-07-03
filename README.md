@@ -1,9 +1,6 @@
 # Arduino_ADXL345_Logger_SSD1306 (震動紀錄器)
 ## 利用 ADXL345 的陀螺儀當作震動偵測器
 
-## Wiring
-![image](./image/wiring.png)
-
 ## 材料
 (1) Arduino Nano  
 (2) ADXL345  
@@ -31,6 +28,9 @@ https://github.com/adafruit/Adafruit_BusIO
 (1) 螢幕解析度實際上只用到128x32，因為使用128x64，Arduino會記憶體不足  
 (2) 預設每0.2秒會記錄一筆資料，可以連續紀錄約9天，超過會自動回頭覆蓋，就像行車紀錄器  
 (3) Nor Flash 製作成可拆卸式的，需要讀取紀錄的時候，拆下來去另外一個裝置讀取  
+
+## Wiring
+![image](./image/wiring.png)
 
 ## 照片  
 ![image](./image/1.jpg)
