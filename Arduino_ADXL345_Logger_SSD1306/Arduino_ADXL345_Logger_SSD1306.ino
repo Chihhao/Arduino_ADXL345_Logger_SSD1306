@@ -55,60 +55,63 @@ float LOWERBOUND_Z = AVG_Z - 3.1*STDEV_Z;
 void setup() {
   Serial.begin(115200);
   clock.begin();
-
+  Serial.println(F("RTC Ready"));
+  
   pinMode(RELAY, OUTPUT); 
   digitalWrite(RELAY, LOW);
   
   flash.begin(MB(128));
+  Serial.println(F("flash Ready"));
   gAdr = findIdxOfFlash();
   delay(100);  
 
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-  /*display.clearDisplay();
+  Serial.println(F("SSD1306 Ready"));
+  display.clearDisplay();
   display.setTextSize(2); 
   display.setTextColor(SSD1306_WHITE); 
   display.setCursor(0,0); 
   display.println(F("START"));
-  display.display();*/
+  display.display();
   
-  //delay(5000);  
+  delay(2000);  
   
   initialScreen(); 
   display.display();
+  
 
   if(!accel.begin()){ //begin accel, check if it's working
     display.write("No ADXL345 detected");
     while(1);
   }
   accel.setRange(ADXL345_RANGE_8_G);  
-
+  Serial.println(F("ADXL345 Ready"));
 }
 
-void loop() { 
-  
+void loop() {   
   getSensorValue();
+
   
   //if(relay==LOW){
     if(gX>UPPERBOUND_X || gX<LOWERBOUND_X){      
       digitalWrite(RELAY, HIGH);
       Serial.print("! X:"); Serial.println(gX); 
-      writeToFlash("ALARM!");  
+      //writeToFlash("ALARM!");  
       relay=HIGH;
     }
     if(gY>UPPERBOUND_Y || gY<LOWERBOUND_Y){
       digitalWrite(RELAY, HIGH);
       Serial.print("! Y:"); Serial.println(gY); 
-      writeToFlash("ALARM!"); 
+      //writeToFlash("ALARM!"); 
       relay=HIGH;
     }
     if(gZ>UPPERBOUND_Z || gZ<LOWERBOUND_Z){
       digitalWrite(RELAY, HIGH);
       Serial.print("! Z:"); Serial.println(gZ); 
-      writeToFlash("ALARM!"); 
+      //writeToFlash("ALARM!"); 
       relay=HIGH;
     }
   //}
-
 
   if(iNowXPosition>4){
     display.drawLine(iNowXPosition-1 , iLastY, 
@@ -221,9 +224,9 @@ void writeToFlash(char* str){
   if(gAdr%4096==0){ erase4K(gAdr); }
   
   if (flash.writeCharArray(gAdr, str, ARRSZ, true)) {
-    //myPrintHex(gAdr);
-    //Serial.print(F(" W: ")); Serial.println(str);    
-    //Serial.print(textAdr); 
+//    myPrintHex(gAdr);
+//    Serial.print(F(" W: ")); Serial.println(str);    
+//    Serial.print(textAdr); 
     
     /*
     Serial.print(F(" R: ")); 
