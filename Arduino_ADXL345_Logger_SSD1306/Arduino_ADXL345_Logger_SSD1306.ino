@@ -5,6 +5,8 @@
 //https://github.com/adafruit/Adafruit-GFX-Library
 //https://github.com/adafruit/Adafruit_BusIO
 
+#define VERSION "ver-3"
+
 #include <Adafruit_SSD1306.h>
 #define OLED_RESET    4
 #define SCREEN_WIDTH 128 
@@ -14,11 +16,13 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #include <Adafruit_ADXL345_U.h>
 Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345); //assign ID to our accelerometer
 
-float gX, gY, gZ;
-float gValue;
+float fInputX, fInputY, fInputZ;
+int iPlotValue;
+float UBX, UBY, UBZ;
+float LBX, LBY, LBZ;
 
 #include <DS3231.h>
-DS3231 clock;
+DS3231 RTC;
 RTCDateTime dt;
 char caRealTime[16];
 
@@ -36,25 +40,16 @@ int iLastY=0;
 
 #define RELAY 3
 bool relay = LOW;
-float AVG_X = 1.167449;
-float STDEV_X = 0.474222;
-float UPPERBOUND_X = AVG_X + 3.1*STDEV_X;
-float LOWERBOUND_X = AVG_X - 3.1*STDEV_X;
-
-float AVG_Y = 11.71858;
-float STDEV_Y = 0.496097;
-float UPPERBOUND_Y = AVG_Y + 3.1*STDEV_Y;
-float LOWERBOUND_Y = AVG_Y - 3.1*STDEV_Y;
-
-float AVG_Z = -1.41633;
-float STDEV_Z = 0.667364;
-float UPPERBOUND_Z = AVG_Z + 3.1*STDEV_Z;
-float LOWERBOUND_Z = AVG_Z - 3.1*STDEV_Z;
-
 
 void setup() {
   Serial.begin(115200);
-  clock.begin();
+
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  Serial.println(F("SSD1306 Ready"));
+  displayWriteOnce(VERSION, "Init...");
+  delay(1000);  
+  
+  RTC.begin();
   Serial.println(F("RTC Ready"));
   
   pinMode(RELAY, OUTPUT); 
@@ -65,62 +60,91 @@ void setup() {
   gAdr = findIdxOfFlash();
   delay(100);  
 
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-  Serial.println(F("SSD1306 Ready"));
-  display.clearDisplay();
-  display.setTextSize(2); 
-  display.setTextColor(SSD1306_WHITE); 
-  display.setCursor(0,0); 
-  display.println(F("START"));
-  display.display();
-  
-  delay(2000);  
-  
-  initialScreen(); 
-  display.display();
-  
-
-  if(!accel.begin()){ //begin accel, check if it's working
-    display.write("No ADXL345 detected");
+  if(!accel.begin()){ //begin accel, check if it's working   
+    displayWriteOnce("ADXL345", "Error!") ;
     while(1);
   }
   accel.setRange(ADXL345_RANGE_8_G);  
   Serial.println(F("ADXL345 Ready"));
+
+  //取得最大最小值
+  getUpperAndLowerBound();
+
+  initialScreen(); 
+  display.display();
+}
+
+void displayWriteOnce(char* msg1, char* msg2){
+    display.clearDisplay();
+    display.setTextSize(2); 
+    display.setTextColor(SSD1306_WHITE); 
+    display.setCursor(0,0); 
+    display.println(msg1);
+    display.println(msg2);
+    display.display();
+}
+
+void getUpperAndLowerBound(){
+  // 放棄前五筆資料
+  for(int i=0; i<5; i++) { getSensorValue(); }
+
+  //Init
+  UBX = -9999.0;  UBY = -9999.0;  UBZ = -9999.0;
+  LBX =  9999.0;  LBY =  9999.0;  LBZ =  9999.0;
+
+  for(int i=0; i<100; i++){
+    getSensorValue();
+    if(fInputX > UBX) UBX = fInputX;
+    if(fInputY > UBY) UBY = fInputY;
+    if(fInputZ > UBZ) UBZ = fInputZ;
+    if(fInputX < LBX) LBX = fInputX;
+    if(fInputY < LBY) LBY = fInputY;
+    if(fInputZ < LBZ) LBZ = fInputZ;   
+    Serial.print("UBX:"); Serial.print(UBX);  Serial.print("  LBX:"); Serial.println(LBX); 
+    Serial.print("UBY:"); Serial.print(UBY);  Serial.print("  LBY:"); Serial.println(LBY); 
+    Serial.print("UBZ:"); Serial.print(UBZ);  Serial.print("  LBZ:"); Serial.println(LBZ);  
+  }
+
+  UBX += 0.60 * (UBX-LBX);
+  LBX -= 0.60 * (UBX-LBX);
+  UBY += 0.60 * (UBY-LBY);
+  LBY -= 0.60 * (UBY-LBY);
+  UBZ += 0.60 * (UBZ-LBZ);
+  LBZ -= 0.60 * (UBZ-LBZ);  
+  Serial.print("UBX:"); Serial.print(UBX);  Serial.print("  LBX:"); Serial.println(LBX); 
+  Serial.print("UBY:"); Serial.print(UBY);  Serial.print("  LBY:"); Serial.println(LBY); 
+  Serial.print("UBZ:"); Serial.print(UBZ);  Serial.print("  LBZ:"); Serial.println(LBZ);   
 }
 
 void loop() {   
   getSensorValue();
+ 
+  if( fInputX > UBX || fInputX < LBX ){      
+    Serial.print("! X:"); Serial.println(fInputX); 
+    relay = HIGH;
+  }
+  if( fInputY > UBY || fInputY < LBY ){
+    Serial.print("! Y:"); Serial.println(fInputY); 
+    relay = HIGH;
+  }
+  if( fInputZ > UBZ || fInputZ < LBZ ){
+    Serial.print("! Z:"); Serial.println(fInputZ); 
+    relay = HIGH;
+  }
 
-  
-  //if(relay==LOW){
-    if(gX>UPPERBOUND_X || gX<LOWERBOUND_X){      
-      digitalWrite(RELAY, HIGH);
-      Serial.print("! X:"); Serial.println(gX); 
-      //writeToFlash("ALARM!");  
-      relay=HIGH;
-    }
-    if(gY>UPPERBOUND_Y || gY<LOWERBOUND_Y){
-      digitalWrite(RELAY, HIGH);
-      Serial.print("! Y:"); Serial.println(gY); 
-      //writeToFlash("ALARM!"); 
-      relay=HIGH;
-    }
-    if(gZ>UPPERBOUND_Z || gZ<LOWERBOUND_Z){
-      digitalWrite(RELAY, HIGH);
-      Serial.print("! Z:"); Serial.println(gZ); 
-      //writeToFlash("ALARM!"); 
-      relay=HIGH;
-    }
-  //}
+  if(relay == HIGH && digitalRead(RELAY) == LOW){
+    writeToFlash("ALARM!"); 
+    digitalWrite(RELAY, HIGH);
+  }
 
   if(iNowXPosition>4){
     display.drawLine(iNowXPosition-1 , iLastY, 
-                     iNowXPosition , gValue, WHITE);     
+                     iNowXPosition , iPlotValue, WHITE);     
   }
   else{
-    display.drawPixel(iNowXPosition, gValue, WHITE);
+    display.drawPixel(iNowXPosition, iPlotValue, WHITE);
   }
-  iLastY = gValue;
+  iLastY = iPlotValue;
   
   iNowXPosition++;  
   if(iNowXPosition>=128){
@@ -179,16 +203,16 @@ void getSensorValue(){
   int H = SCREEN_HEIGHT-1;
   sensors_event_t event;
   accel.getEvent(&event);
-  gX = event.acceleration.x;
-  gY = event.acceleration.y;
-  gZ = event.acceleration.z;
-  gValue = map(gZ, -5, 5, 0, H);
-  if(gValue>H) gValue=H;
-  if(gValue<0) gValue=0;
+  fInputX = event.acceleration.x;
+  fInputY = event.acceleration.y;
+  fInputZ = event.acceleration.z;
+  iPlotValue = map(fInputZ, -5, 5, 0, H);
+  if(iPlotValue>H) iPlotValue = H;
+  if(iPlotValue<0) iPlotValue = 0;
 }
 
 void getRealTime(){
-  RTCDateTime dt = clock.getDateTime();
+  RTCDateTime dt = RTC.getDateTime();
   int yy = dt.year-2000;
   int mm = dt.month;
   int dd = dt.day;
@@ -200,18 +224,14 @@ void getRealTime(){
 }
 
 void writeLog(){
-
-  char gValueX[7];
-  dtostrf(gX,5,2,gValueX);
-  char gValueY[7];
-  dtostrf(gY,5,2,gValueY);
-  char gValueZ[7];
-  dtostrf(gZ,5,2,gValueZ); 
+  char strInputX[7], strInputY[7], strInputZ[7];
+  dtostrf(fInputX,5,2,strInputX);
+  dtostrf(fInputY,5,2,strInputY);
+  dtostrf(fInputZ,5,2,strInputZ); 
   
   getRealTime();  
   char text[ARRSZ]; 
-  sprintf(text, "%s %s,%s,%s", 
-          caRealTime, gValueX, gValueY, gValueZ);
+  sprintf(text, "%s %s,%s,%s", caRealTime, strInputX, strInputY, strInputZ);
   writeToFlash(text);  
 }
 
